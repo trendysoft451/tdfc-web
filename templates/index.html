@@ -5,73 +5,157 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>TDFC Dico</title>
 
+  <!-- Apple PWA -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="TDFC Dico">
   <link rel="apple-touch-icon" href="/static/icon.png">
 
   <style>
-    body { font-family:-apple-system,system-ui; margin:20px; background:#f7f7f7;}
-    .card { max-width:560px; margin:auto; padding:20px; background:#fff; border-radius:16px; box-shadow:0 4px 20px rgba(0,0,0,0.08);}
-    input,button { width:100%; padding:14px; margin-top:12px; border-radius:12px; border:1px solid #ccc;}
-    button { background:#007aff; color:#fff; border:none;}
-    pre { background:#f2f2f2; padding:14px; border-radius:12px;}
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      margin: 20px;
+      background: #f7f7f7;
+    }
+
+    .card {
+      max-width: 560px;
+      margin: auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+
+    h2 { margin-top: 0; }
+
+    input, button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      border-radius: 12px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+
+    button {
+      background: #007aff;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:active { opacity: 0.85; }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    /* ===== Zone résultat scrollable ===== */
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      background: #f2f2f2;
+      padding: 14px;
+      border-radius: 12px;
+      margin-top: 14px;
+
+      max-height: 260px;      /* hauteur fixe */
+      overflow-y: auto;       /* scroll vertical */
+      overflow-x: hidden;     /* pas de scroll horizontal */
+    }
+
+    .hr {
+      height: 1px;
+      background: #eee;
+      margin: 18px 0;
+    }
   </style>
 </head>
 
 <body>
 <div class="card">
+
   <h2>TDFC Dico</h2>
 
   {% if is_admin_ui %}
+    <div class="hr"></div>
     <h3>Admin</h3>
+
     <input id="adminKey" placeholder="Clé admin">
     <input type="file" id="file" accept=".xlsx">
     <button onclick="upload()">Uploader</button>
     <pre id="uploadOut">—</pre>
   {% endif %}
 
+  <div class="hr"></div>
+
   <h3>Recherche</h3>
+
   <input id="imprime" placeholder="Imprimé">
   <input id="codeedi" placeholder="Code EDI">
 
   <label>
-    <input id="all" type="checkbox" style="width:auto;"> Tous les résultats
+    <input id="all" type="checkbox" style="width:auto;">
+    Tous les résultats
   </label>
 
   <button onclick="lookup()">Rechercher</button>
 
   <h3>Résultat</h3>
   <pre id="out">—</pre>
+
 </div>
 
 <script>
 async function upload(){
-  const f=document.getElementById("file").files[0];
-  const key=document.getElementById("adminKey").value;
-  const fd=new FormData();
-  fd.append("file",f);
+  const f = document.getElementById("file").files[0];
+  const key = document.getElementById("adminKey").value;
+  const fd = new FormData();
+  fd.append("file", f);
 
-  const res=await fetch("/upload?key="+encodeURIComponent(key),{method:"POST",body:fd});
-  if(res.ok){ location.href="/"; }
+  const res = await fetch("/upload?key=" + encodeURIComponent(key), {
+    method: "POST",
+    body: fd
+  });
+
+  if (res.ok) {
+    location.href = "/";
+  } else {
+    const data = await res.json();
+    document.getElementById("uploadOut").textContent =
+      data.detail || "Erreur upload";
+  }
 }
 
 async function lookup(){
-  const imprime=document.getElementById("imprime").value;
-  const codeedi=document.getElementById("codeedi").value;
-  const all=document.getElementById("all").checked;
+  const imprime = document.getElementById("imprime").value.trim();
+  const codeedi = document.getElementById("codeedi").value.trim();
+  const all = document.getElementById("all").checked;
 
-  const qs=new URLSearchParams({imprime,codeedi,all});
-  const res=await fetch("/lookup?"+qs.toString());
-  const data=await res.json();
+  const out = document.getElementById("out");
 
-  if(!data.found){
-    document.getElementById("out").textContent="Non trouvé";
+  if (!imprime || !codeedi) {
+    out.textContent = "Veuillez renseigner Imprimé et Code EDI.";
     return;
   }
 
-  document.getElementById("out").textContent=
-    data.libelle || (data.libelles||[]).join("\\n");
+  const qs = new URLSearchParams({imprime, codeedi, all});
+  const res = await fetch("/lookup?" + qs.toString());
+  const data = await res.json();
+
+  if (!data.found) {
+    out.textContent = "Non trouvé";
+    return;
+  }
+
+  out.textContent =
+    data.libelle || (data.libelles || []).join("\\n");
 }
 </script>
+
 </body>
 </html>
