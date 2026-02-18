@@ -1,125 +1,77 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>TDFC Dico</title>
 
-  <!-- Apple PWA Support -->
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="TDFC Dico">
   <link rel="apple-touch-icon" href="/static/icon.png">
-  <link rel="icon" type="image/png" href="/static/icon.png">
 
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; margin: 20px; background: #f7f7f7; }
-    .card { max-width: 560px; margin: 0 auto; padding: 20px; background: #fff; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-    input, button { width: 100%; padding: 14px; margin-top: 12px; font-size: 16px; border-radius: 12px; border: 1px solid #ccc; }
-    button { background: #007aff; color: #fff; border: none; cursor: pointer; }
-    button:active { opacity: 0.85; }
-    label { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 15px; }
-    pre { white-space: pre-wrap; word-wrap: break-word; background: #f2f2f2; padding: 14px; border-radius: 12px; margin-top: 14px; }
-    .hr { height: 1px; background: #eee; margin: 18px 0; }
-    .hint { color:#666; font-size: 13px; margin-top: 8px; }
-    .badge { display:inline-block; padding: 4px 10px; border-radius: 999px; background:#eee; font-size: 12px; }
+    body { font-family:-apple-system,system-ui; margin:20px; background:#f7f7f7;}
+    .card { max-width:560px; margin:auto; padding:20px; background:#fff; border-radius:16px; box-shadow:0 4px 20px rgba(0,0,0,0.08);}
+    input,button { width:100%; padding:14px; margin-top:12px; border-radius:12px; border:1px solid #ccc;}
+    button { background:#007aff; color:#fff; border:none;}
+    pre { background:#f2f2f2; padding:14px; border-radius:12px;}
   </style>
 </head>
 
 <body>
-  <div class="card">
-    <h2>TDFC Dico</h2>
+<div class="card">
+  <h2>TDFC Dico</h2>
 
-    <div class="hint">
-      Fichier chargé :
-      {% if has_file %}
-        <span class="badge">Oui</span>
-      {% else %}
-        <span class="badge">Non</span>
-      {% endif %}
-      — Upload visible uniquement via <b>/?admin=1</b>
-    </div>
+  {% if is_admin_ui %}
+    <h3>Admin</h3>
+    <input id="adminKey" placeholder="Clé admin">
+    <input type="file" id="file" accept=".xlsx">
+    <button onclick="upload()">Uploader</button>
+    <pre id="uploadOut">—</pre>
+  {% endif %}
 
-    {% if is_admin_ui %}
-      <div class="hr"></div>
-      <h3>Admin (upload)</h3>
-      <div class="hint">Cette section est visible car tu es sur <b>/?admin=1</b>.</div>
+  <h3>Recherche</h3>
+  <input id="imprime" placeholder="Imprimé">
+  <input id="codeedi" placeholder="Code EDI">
 
-      <input id="adminKey" placeholder="Clé admin (TDFC_ADMIN_KEY)" />
-      <input id="sheetUpload" value="{{ sheet_default }}" placeholder="Onglet (ex: 2026)" />
-      <input id="file" type="file" accept=".xlsx" />
-      <button onclick="upload()">Uploader & indexer</button>
-      <pre id="uploadOut">—</pre>
-    {% endif %}
+  <label>
+    <input id="all" type="checkbox" style="width:auto;"> Tous les résultats
+  </label>
 
-    <div class="hr"></div>
+  <button onclick="lookup()">Rechercher</button>
 
-    <h3>Recherche</h3>
-    <input id="sheet" value="{{ sheet_default }}" placeholder="Onglet (ex: 2026)" />
-    <input id="imprime" placeholder="Imprimé (ex: 2035)" />
-    <input id="codeedi" placeholder="Code EDI (ex: AA)" />
+  <h3>Résultat</h3>
+  <pre id="out">—</pre>
+</div>
 
-    <label>
-      <input id="all" type="checkbox" style="width:auto;">
-      Tous les résultats
-    </label>
+<script>
+async function upload(){
+  const f=document.getElementById("file").files[0];
+  const key=document.getElementById("adminKey").value;
+  const fd=new FormData();
+  fd.append("file",f);
 
-    <button onclick="lookup()">Rechercher</button>
+  const res=await fetch("/upload?key="+encodeURIComponent(key),{method:"POST",body:fd});
+  if(res.ok){ location.href="/"; }
+}
 
-    <h3>Résultat</h3>
-    <pre id="out">—</pre>
-  </div>
+async function lookup(){
+  const imprime=document.getElementById("imprime").value;
+  const codeedi=document.getElementById("codeedi").value;
+  const all=document.getElementById("all").checked;
 
-  <script>
-    async function upload() {
-      const f = document.getElementById("file").files[0];
-      const key = document.getElementById("adminKey").value.trim();
-      const sheet = (document.getElementById("sheetUpload").value.trim() || "2026");
-      const box = document.getElementById("uploadOut");
+  const qs=new URLSearchParams({imprime,codeedi,all});
+  const res=await fetch("/lookup?"+qs.toString());
+  const data=await res.json();
 
-      if (!f) { box.textContent = "Choisis un fichier .xlsx"; return; }
+  if(!data.found){
+    document.getElementById("out").textContent="Non trouvé";
+    return;
+  }
 
-      const fd = new FormData();
-      fd.append("file", f);
-
-      box.textContent = "Upload en cours…";
-
-      const url = "/upload?sheet=" + encodeURIComponent(sheet) + "&key=" + encodeURIComponent(key);
-      const res = await fetch(url, { method: "POST", body: fd });
-      const data = await res.json();
-
-      if (!res.ok) {
-        box.textContent = (data.detail || "Erreur");
-        return;
-      }
-
-      box.textContent = "OK — indexation terminée. Redirection…";
-      setTimeout(() => location.href = "/", 600);  // cache l’upload après succès
-    }
-
-    async function lookup() {
-      const sheet = (document.getElementById("sheet").value.trim() || "2026");
-      const imprime = document.getElementById("imprime").value.trim();
-      const codeedi = document.getElementById("codeedi").value.trim();
-      const all = document.getElementById("all").checked;
-
-      const out = document.getElementById("out");
-
-      if (!imprime || !codeedi) {
-        out.textContent = "Veuillez renseigner Imprimé et Code EDI.";
-        return;
-      }
-
-      const qs = new URLSearchParams({ sheet, imprime, codeedi, all: String(all) });
-      const res = await fetch("/lookup?" + qs.toString());
-      const data = await res.json();
-
-      if (!res.ok) { out.textContent = (data.detail || "Erreur serveur"); return; }
-      if (!data.found) { out.textContent = "Non trouvé"; return; }
-
-      out.textContent = data.libelle ? data.libelle : (data.libelles || []).join("\\n");
-    }
-  </script>
+  document.getElementById("out").textContent=
+    data.libelle || (data.libelles||[]).join("\\n");
+}
+</script>
 </body>
 </html>
