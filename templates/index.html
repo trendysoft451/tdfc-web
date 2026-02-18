@@ -1,55 +1,133 @@
 <!doctype html>
-<html>
+<html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TDFC Lookup</title>
-<style>
-body { font-family: -apple-system, system-ui; margin: 20px; }
-input, button { width:100%; padding:12px; margin-top:10px; border-radius:10px; }
-button { cursor:pointer; }
-pre { background:#f4f4f4; padding:10px; border-radius:10px; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  
+  <title>TDFC Dico</title>
+
+  <!-- Apple PWA Support -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="TDFC Dico">
+  <link rel="apple-touch-icon" href="/static/icon.png">
+
+  <!-- Favicon (optionnel) -->
+  <link rel="icon" type="image/png" href="/static/icon.png">
+
+  <style>
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      margin: 20px;
+      background: #f8f8f8;
+    }
+
+    .card {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 20px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+
+    h2 {
+      margin-top: 0;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      font-size: 16px;
+      border-radius: 12px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      background: #007aff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:active {
+      opacity: 0.85;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      font-size: 15px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      background: #f2f2f2;
+      padding: 14px;
+      border-radius: 12px;
+      margin-top: 14px;
+    }
+  </style>
 </head>
+
 <body>
-<h2>TDFC Lookup</h2>
+  <div class="card">
+    <h2>TDFC Dico</h2>
 
-<h3>Upload (admin)</h3>
-<input id="key" placeholder="Clé admin">
-<input type="file" id="file" accept=".xlsx">
-<button onclick="upload()">Uploader</button>
-<pre id="uploadOut">—</pre>
+    <input id="imprime" placeholder="Imprimé (ex: 2035)" />
+    <input id="codeedi" placeholder="Code EDI (ex: AA)" />
 
-<h3>Recherche</h3>
-<input id="imprime" placeholder="Imprimé">
-<input id="codeedi" placeholder="Code EDI">
-<label><input type="checkbox" id="all"> Tous les résultats</label>
-<button onclick="lookup()">Rechercher</button>
+    <label>
+      <input id="all" type="checkbox" style="width:auto;">
+      Tous les résultats
+    </label>
 
-<h3>Résultat</h3>
-<pre id="out">—</pre>
+    <button onclick="lookup()">Rechercher</button>
 
-<script>
-async function upload(){
-  const f = document.getElementById("file").files[0];
-  const key = document.getElementById("key").value;
-  const fd = new FormData();
-  fd.append("file", f);
-  const res = await fetch("/upload?key="+encodeURIComponent(key), {method:"POST", body:fd});
-  const data = await res.json();
-  document.getElementById("uploadOut").textContent = data.message || data.detail;
-}
+    <h3>Résultat</h3>
+    <pre id="out">—</pre>
+  </div>
 
-async function lookup(){
-  const imprime = document.getElementById("imprime").value;
-  const codeedi = document.getElementById("codeedi").value;
-  const all = document.getElementById("all").checked;
-  const qs = new URLSearchParams({imprime, codeedi, all});
-  const res = await fetch("/lookup?"+qs.toString());
-  const data = await res.json();
-  if(!data.found){ document.getElementById("out").textContent="Non trouvé"; return; }
-  document.getElementById("out").textContent = data.libelle || (data.libelles||[]).join("\n");
-}
-</script>
+  <script>
+    async function lookup() {
+      const imprime = document.getElementById("imprime").value.trim();
+      const codeedi = document.getElementById("codeedi").value.trim();
+      const all = document.getElementById("all").checked;
+
+      if (!imprime || !codeedi) {
+        document.getElementById("out").textContent = "Veuillez renseigner les deux champs.";
+        return;
+      }
+
+      const qs = new URLSearchParams({
+        imprime,
+        codeedi,
+        all: String(all)
+      });
+
+      const res = await fetch("/lookup?" + qs.toString());
+      const data = await res.json();
+
+      const out = document.getElementById("out");
+
+      if (!res.ok) {
+        out.textContent = data.detail || "Erreur serveur";
+        return;
+      }
+
+      if (!data.found) {
+        out.textContent = "Non trouvé";
+        return;
+      }
+
+      out.textContent = data.libelle
+        ? data.libelle
+        : (data.libelles || []).join("\\n");
+    }
+  </script>
 </body>
 </html>
