@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TDFC Lookup</title>
+<style>
+body { font-family: -apple-system, system-ui; margin: 20px; }
+input, button { width:100%; padding:12px; margin-top:10px; border-radius:10px; }
+button { cursor:pointer; }
+pre { background:#f4f4f4; padding:10px; border-radius:10px; }
+</style>
+</head>
+<body>
+<h2>TDFC Lookup</h2>
+
+<h3>Upload (admin)</h3>
+<input id="key" placeholder="Clé admin">
+<input type="file" id="file" accept=".xlsx">
+<button onclick="upload()">Uploader</button>
+<pre id="uploadOut">—</pre>
+
+<h3>Recherche</h3>
+<input id="imprime" placeholder="Imprimé">
+<input id="codeedi" placeholder="Code EDI">
+<label><input type="checkbox" id="all"> Tous les résultats</label>
+<button onclick="lookup()">Rechercher</button>
+
+<h3>Résultat</h3>
+<pre id="out">—</pre>
+
+<script>
+async function upload(){
+  const f = document.getElementById("file").files[0];
+  const key = document.getElementById("key").value;
+  const fd = new FormData();
+  fd.append("file", f);
+  const res = await fetch("/upload?key="+encodeURIComponent(key), {method:"POST", body:fd});
+  const data = await res.json();
+  document.getElementById("uploadOut").textContent = data.message || data.detail;
+}
+
+async function lookup(){
+  const imprime = document.getElementById("imprime").value;
+  const codeedi = document.getElementById("codeedi").value;
+  const all = document.getElementById("all").checked;
+  const qs = new URLSearchParams({imprime, codeedi, all});
+  const res = await fetch("/lookup?"+qs.toString());
+  const data = await res.json();
+  if(!data.found){ document.getElementById("out").textContent="Non trouvé"; return; }
+  document.getElementById("out").textContent = data.libelle || (data.libelles||[]).join("\n");
+}
+</script>
+</body>
+</html>
