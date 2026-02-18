@@ -8,6 +8,10 @@ from typing import Optional, Tuple, List
 from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 import openpyxl
 
