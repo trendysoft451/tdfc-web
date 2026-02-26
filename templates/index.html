@@ -1,12 +1,9 @@
-<!doctype html>
+  <!doctype html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tikeo - Gestion des frais</title>
-
-  <!-- ✅ IA locale (segmentation) -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
 
   <style>
     :root{
@@ -324,6 +321,7 @@
     <button id="openDossier" style="background:#28a745;margin-left:8px">Ouvrir dossier</button>
 
     <button id="backHome" style="background:#64748b">Retour accueil</button>
+
     <button id="resetTicketCounter" style="background:#ef4444">RAZ compteur tickets</button>
 
     <div id="adminErr" class="error"></div>
@@ -449,7 +447,6 @@
   </div>
 </div>
 
-<!-- OpenCV.js -->
 <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <script>
@@ -507,7 +504,8 @@
 
   /* ===== Compteur ticket : NE BOUGE QUE SI validation OK ET ticket auto ===== */
   function getTicketCounter() {
-    const v = Number(localStorage.getItem("ticket_counter_T") || "0");
+    const key = "ticket_counter_T";
+    const v = Number(localStorage.getItem(key) || "0");
     return Number.isFinite(v) && v >= 0 ? v : 0;
   }
 
@@ -516,6 +514,7 @@
     return "T" + String(next).padStart(4, "0");
   }
 
+  // Commit UNIQUEMENT quand l'écriture est validée (succès serveur)
   function commitTicketNumberUsed(num) {
     const m = /^T(\d{4,})$/i.exec(String(num || "").trim());
     if (!m) return;
@@ -524,7 +523,6 @@
     localStorage.setItem("ticket_counter_T", String(used));
   }
 
-  /** ===== OpenCV ready ===== */
   function waitForOpenCV(timeoutMs = 12000) {
     return new Promise((resolve, reject) => {
       const start = Date.now();
@@ -536,7 +534,6 @@
     });
   }
 
-  /** rotation EXIF auto si support */
   async function loadImageBitmapWithOrientation(file) {
     if (window.createImageBitmap) {
       try { return await createImageBitmap(file, { imageOrientation: "from-image" }); }
@@ -559,40 +556,6 @@
     return canvas;
   }
 
-  /* ===== IA Segmentation (local) ===== */
-  async function segmentWithAI(canvas){
-    return new Promise(async (resolve, reject) => {
-      try{
-        const seg = new SelfieSegmentation({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
-        });
-
-        seg.setOptions({ modelSelection: 1 });
-
-        seg.onResults((results) => {
-          const out = document.createElement("canvas");
-          out.width = canvas.width;
-          out.height = canvas.height;
-          const ctx = out.getContext("2d");
-
-          // segmentation mask
-          ctx.drawImage(results.segmentationMask, 0, 0, out.width, out.height);
-
-          // keep only segmented pixels
-          ctx.globalCompositeOperation = "source-in";
-          ctx.drawImage(results.image, 0, 0, out.width, out.height);
-          ctx.globalCompositeOperation = "source-over";
-
-          resolve(out);
-        });
-
-        await seg.send({ image: canvas });
-      }catch(e){
-        reject(e);
-      }
-    });
-  }
-
   function orderCorners(pts) {
     const sum = pts.map(p => p.x + p.y);
     const diff = pts.map(p => p.x - p.y);
@@ -602,11 +565,13 @@
     const bl = pts[diff.indexOf(Math.min(...diff))];
     return [tl, tr, br, bl];
   }
+
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
   function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
 
+  /* Fallback minAreaRect -> 4 points (math-safe, sans API incertaine) */
   function rectPointsFromMinAreaRect(cnt){
-    const rr = cv.minAreaRect(cnt);
+    const rr = cv.minAreaRect(cnt); // {center:{x,y}, size:{width,height}, angle}
     const cx = rr.center.x, cy = rr.center.y;
     const w = rr.size.width, h = rr.size.height;
     const a = (rr.angle || 0) * Math.PI / 180;
@@ -627,6 +592,7 @@
     }));
   }
 
+  /* Auto-crop: enlève les bordures blanches après warp */
   function autoCropTicketCanvas(canvas, whiteThreshold = 245, margin = 8){
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     const w = canvas.width, h = canvas.height;
@@ -656,6 +622,7 @@
     const cw = maxX - minX + 1;
     const ch = maxY - minY + 1;
 
+    // évite crop trop agressif
     if (cw < w*0.55 || ch < h*0.55) return canvas;
 
     const out = document.createElement("canvas");
@@ -664,11 +631,13 @@
     return out;
   }
 
+  /* Effet "scan" : fond blanchi + texte renforcé */
   function enhanceDocumentCanvas(canvas){
     const src = cv.imread(canvas);
     const gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
+    // léger blur pour stabiliser le threshold
     const blur = new cv.Mat();
     cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
 
@@ -693,12 +662,14 @@
     return outCanvas;
   }
 
+  /* Détection + perspective + nettoyage fond */
   function scanTicketOpenCV(srcCanvas) {
     const src = cv.imread(srcCanvas);
 
     const gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
+    // CLAHE pour ombres / contraste local
     let claheOut = new cv.Mat();
     try {
       const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
@@ -768,6 +739,7 @@
     }
 
     const minArea = src.rows * src.cols * 0.18;
+
     let pts = null;
 
     if (best && bestArea >= minArea) {
@@ -776,6 +748,7 @@
     } else if (bestCnt && bestCntArea >= minArea) {
       pts = rectPointsFromMinAreaRect(bestCnt);
     } else {
+      // cleanup
       src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
       kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
       if (best) best.delete();
@@ -819,14 +792,17 @@
     outCanvas.height = dstH;
     cv.imshow(outCanvas, warped);
 
+    // cleanup mats
     src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
     kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
     srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
     if (best) best.delete();
     if (bestCnt) bestCnt.delete();
 
+    // Effet scan + auto-crop pour "effacer" l'arrière-plan
     const enhanced = enhanceDocumentCanvas(outCanvas);
     const cropped = autoCropTicketCanvas(enhanced, 245, 10);
+
     return cropped;
   }
 
@@ -899,18 +875,8 @@
     await waitForOpenCV();
     const bitmap = await loadImageBitmapWithOrientation(imageFile);
     const baseCanvas = drawBitmapToCanvas(bitmap, 2600);
-
-    // ✅ IA: fond supprimé avant OpenCV
-    let aiCanvas = baseCanvas;
-    try{
-      aiCanvas = await segmentWithAI(baseCanvas);
-    }catch{
-      // fallback silencieux
-      aiCanvas = baseCanvas;
-    }
-
-    const cleaned = scanTicketOpenCV(aiCanvas);
-    const { bytes, w, h } = canvasToJpegBytes(cleaned, 0.86);
+    const canvas = scanTicketOpenCV(baseCanvas);
+    const { bytes, w, h } = canvasToJpegBytes(canvas, 0.86);
     return jpegToPdfBlob(bytes, w, h);
   }
 
@@ -1067,6 +1033,7 @@
         if (ex.date_document) el("dateTicket").value = ex.date_document;
         if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
 
+        // pas d'auto ici : seulement si OCR a trouvé un numero_ticket
         if (ex.numero_ticket) el("numeroTicket").value = ex.numero_ticket;
         else el("numeroTicket").value = "";
 
@@ -1102,6 +1069,7 @@
         return;
       }
 
+      // Numéro ticket: auto seulement si vide, sans incrémenter ici
       const existing = String(el("numeroTicket").value || "").trim();
       const wasAuto = !existing;
       const numeroTicket = existing || peekNextTicketNumber();
